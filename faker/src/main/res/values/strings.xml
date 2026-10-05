@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FakeGXZQ Faker</string>
+    <string name="xposed_description">运行时改写 gxzq WebView 桥数据（等同 iOS 端 RuntimeFaker）</string>
+</resources>

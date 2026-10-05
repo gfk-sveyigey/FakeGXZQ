@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- TODO(阶段 0)：把占位包名替换为目标 App 的实际包名，或在 LSPosed 里手动勾选作用域。 -->
+    <string-array name="xposed_scope">
+        <item>com.gxzq.app</item>
+    </string-array>
+</resources>

@@ -1,0 +1,118 @@
+name: Build (dev)
+
+# 提交到 dev 时立即编译验证：编译 + 打包两个未签名 APK，上传为 Actions 工件；不发布 Release。
+# 只改动 VERSION 的推送（例如单纯发版号）不触发 —— 这类改动不影响编译。
+# 注意：只要这次推送还改了别的文件，仍会正常触发。
+on:
+  push:
+    branches: [ dev ]
+    paths-ignore:
+      - VERSION
+  # 需要时也可以在 Actions 页面手动触发（手动触发不受上面的路径过滤影响）
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 同一分支只保留最新一次构建：新的推送会取消进行中的旧构建，省 runner 时间
+concurrency:
+  group: build-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # v3 的默认值是 "tools platform-tools"，新版 cmdline-tools 已移除独立的 tools 包，
+          # 这里显式声明真正需要的 SDK 组件，避免 sdkmanager 报 Failed to find package 'tools'。
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+
+      # 仓库不提交 Gradle wrapper，由 setup-gradle 提供固定版本的 gradle 命令
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      # 与发布流程一致的前置校验，让工程配置问题尽早暴露
+      - name: Validate project layout
+        run: |
+          set -e
+          for f in settings.gradle.kts build.gradle.kts gradle.properties VERSION; do
+            test -f "$f" || { echo "::error::$f not found"; exit 1; }
+          done
+          for m in faker monitor; do
+            test -f "$m/src/main/assets/xposed_init" || { echo "::error::$m xposed_init not found"; exit 1; }
+            grep -q 'xposedmodule' "$m/src/main/AndroidManifest.xml" || { echo "::error::$m is not an Xposed module"; exit 1; }
+          done
+
+      - name: Read version
+        id: version
+        run: |
+          set -e
+          if [ ! -f VERSION ]; then
+            echo "::error::VERSION file not found in repository root"
+            exit 1
+          fi
+          RAW=$(tr -d '[:space:]' < VERSION)
+          if [ -z "$RAW" ]; then
+            echo "::error::VERSION file is empty"
+            exit 1
+          fi
+          echo "raw=$RAW" >> "$GITHUB_OUTPUT"
+          echo "Version: $RAW"
+
+      - name: Build debug APKs
+        run: gradle --no-daemon :faker:assembleDebug :monitor:assembleDebug -PversionName="${{ steps.version.outputs.raw }}" -PversionCode="${{ github.run_number }}"
+
+      - name: Package APKs
+        run: |
+          set -e
+          RAW="${{ steps.version.outputs.raw }}"
+          RUN="${{ github.run_number }}"
+          rm -rf build/out
+          mkdir -p build/out
+
+          FAKER=$(find faker/build/outputs/apk/debug -name '*.apk' | head -n 1)
+          MONITOR=$(find monitor/build/outputs/apk/debug -name '*.apk' | head -n 1)
+          test -n "$FAKER" || { echo "::error::Faker APK was not produced"; exit 1; }
+          test -n "$MONITOR" || { echo "::error::Monitor APK was not produced"; exit 1; }
+
+          cp "$FAKER" "build/out/FakeGXZQ-Faker-$RAW-dev$RUN-debug.apk"
+          cp "$MONITOR" "build/out/FakeGXZQ-Monitor-$RAW-dev$RUN-debug.apk"
+
+          ( cd build/out && sha256sum *.apk > SHA256.txt )
+          cat build/out/SHA256.txt
+          ls -lh build/out
+
+      - name: Smoke check products
+        run: |
+          set -e
+          AAPT=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" 2>/dev/null -name aapt2 | sort | tail -n 1)
+          for apk in build/out/*.apk; do
+            echo "== $apk"
+            "$AAPT" dump badging "$apk" | grep -E '^package:|^application-label:' || true
+          done
+
+      # 只上传为 Actions 工件（可在 run 页面下载），不创建 Release
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FakeGXZQ-${{ steps.version.outputs.raw }}-dev${{ github.run_number }}
+          path: |
+            build/out/FakeGXZQ-*-dev*.apk
+            build/out/SHA256.txt
+          if-no-files-found: error
+          retention-days: 14

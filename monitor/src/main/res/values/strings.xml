@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FakeGXZQ Monitor</string>
+    <string name="xposed_description">记录 gxzq WebView 桥通信与 JS 执行（等同 iOS 端 RuntimeMonitor）</string>
+</resources>

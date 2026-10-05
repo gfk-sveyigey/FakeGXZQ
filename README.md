@@ -1,7 +1,7 @@
 # FakeGXZQ
 
 针对证券类 App（`gxzq`）的运行时数据伪造 + 桥通信监控工具链。
-本项目为 iOS 版（越狱 dylib + Cloudflare Worker），下为移植到 Android 的大纲。
+本项目为 Android 版（LSPosed 模块 + Cloudflare Worker），由 iOS 版（越狱 dylib + Cloudflare Worker）移植而来。下为移植大纲与设计说明。
 
 ---
 
@@ -67,3 +67,21 @@
 - 一个 LSPosed 模块工程（`Faker`）+ 一个（`Monitor`），共两个 APK
 - iOS→Android 对照说明与协议摸底记录
 - （可选）Frida 摸底脚本、README/Build 说明
+
+---
+
+## 八、工程与构建（本仓库实现）
+
+按上面的 Android 大纲落地为 Gradle 多模块工程：
+
+| 模块 | 对应 iOS 端 | 产物 |
+|---|---|---|
+| `core/` | 平台无关的核心逻辑 | 库 |
+| `faker/` | RuntimeFaker | FakeGXZQ-Faker APK |
+| `monitor/` | RuntimeMonitor | FakeGXZQ-Monitor APK |
+
+后端 Worker 复用，配置仍取自 `https://gxzq.yugenpu.com/api/config`。
+
+CI 与 iOS 版流程同构：push `dev` 编译 + 上传 Actions 工件；PR 合入 `main` 读取 `VERSION` 发 Release。
+
+构建、安装与配置说明见 `docs/BUILD.md`。

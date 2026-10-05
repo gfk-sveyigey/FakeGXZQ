@@ -30,6 +30,10 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # v3 的默认值是 "tools platform-tools"，新版 cmdline-tools 已移除独立的 tools 包，
+          # 这里显式声明真正需要的 SDK 组件，避免 sdkmanager 报 Failed to find package 'tools'。
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
 
       # 仓库不提交 Gradle wrapper，由 setup-gradle 提供固定版本的 gradle 命令
       - name: Set up Gradle
